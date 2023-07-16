@@ -3,31 +3,41 @@ import json
 from frappe import auth
 
 @frappe.whitelist(allow_guest=True)
-def getItems(filter="",limit=10, offset=0):
-    str=''
+def getItems(filter="", limit=10, offset=0):
+    condition = ''
+
     if filter:
-        f = json.loads(filter)
-        for fil in f:
-            if(fil['operator'].upper() == 'IN'):
-                j=','.join(f"""'{x}'""" for x in fil['value'])
-                str += f" AND A.`{fil['field']}` {fil['operator']} ({j})"
-            elif(fil['operator'].upper() == 'NOT IN'):
-                j=','.join(f"""'{x}'""" for x in fil['value'])
-                str += f" AND A.`{fil['field']}` {fil['operator']} ({j})"
-            elif(fil['operator'].upper() == 'LIKE'):
-                 str += f" AND A.`{fil['field']}` {fil['operator']} '%{fil['value']}%'"
+        parsed_filter = json.loads(filter)
+        for item in parsed_filter:
+            operator = item['operator'].upper()
+            field = item['field']
+            value = item['value']
+
+            if operator == 'IN' or operator == 'NOT IN':
+                j = ','.join([f"'{x}'" for x in value])
+                condition += f" AND A.`{field}` {operator} ({j})"
+            elif operator == 'LIKE':
+                condition += f" AND A.`{field}` {operator} '%{value}%'"
             else:
-                str += f" AND A.`{fil['field']}` {fil['operator']} '{fil['value']}'"
-    
-    sql = f"""select A.* from ( select a.*,b.currency,b.price_list_rate, 
-GROUP_CONCAT(d.dfp_external_storage_s3_key) AS images, GROUP_CONCAT(DISTINCT e.tag) categories from `tabWebsite Item` a 
-left join `tabItem Price` b on a.item_code = b.item_code
-LEFT JOIN `tabFile` d ON d.attached_to_doctype='Website Item' and a.name = d.attached_to_name
-LEFT JOIN `tabTag Link` e ON  e.document_type = 'Website Item' AND e.`document_name` = a.name
- where a.published=1 
- GROUP BY a.name
- LIMIT {limit} OFFSET {offset} ) A where 1=1 {str}"""  
-    result = frappe.db.sql(sql,as_dict=True)
+                condition += f" AND A.`{field}` {operator} '{value}'"
+
+    sql = f"""
+    SELECT A.*
+    FROM (
+        SELECT a.*, b.currency, b.price_list_rate, 
+        GROUP_CONCAT(d.dfp_external_storage_s3_key) AS images, 
+        GROUP_CONCAT(DISTINCT e.tag) categories
+        FROM `tabWebsite Item` a 
+        LEFT JOIN `tabItem Price` b ON a.item_code = b.item_code
+        LEFT JOIN `tabFile` d ON d.attached_to_doctype='Website Item' AND a.name = d.attached_to_name
+        LEFT JOIN `tabTag Link` e ON e.document_type = 'Website Item' AND e.`document_name` = a.name
+        WHERE a.published = 1 
+        GROUP BY a.name
+        LIMIT {limit} OFFSET {offset}
+    ) A
+    WHERE 1=1 {condition}
+    """  
+    result = frappe.db.sql(sql, as_dict=True)
     return result
 
 
