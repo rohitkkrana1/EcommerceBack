@@ -77,7 +77,7 @@ def getCaategoryFrontPage(filter=''):
                 j=','.join(f"""'{x}'""" for x in fil['value'])
                 str += f" AND A.`{fil['field']}` {fil['operator']} ({j})"
 
-    sql=f"""SELECT A.* FROM (SELECT a.name,a.parent_item_group,a.route,group_concat(b.dfp_external_storage_s3_key) as image FROM `tabItem Group` a JOIN tabFile b ON a.item_group_name = b.attached_to_name AND b.attached_to_doctype='Item Group'  AND a.parent_item_group = 'Categories') A where 1=1 {str}"""
+    sql=f"""SELECT A.* FROM (SELECT a.name,a.parent_item_group,a.route,group_concat(b.dfp_external_storage_s3_key) as image FROM `tabItem Group` a JOIN tabFile b ON a.item_group_name = b.attached_to_name AND b.attached_to_doctype='Item Group'  Group By a.name) A where 1=1 {str}"""
     cate = frappe.db.sql(sql,as_dict=True)
     return cate
     
