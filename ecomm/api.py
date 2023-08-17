@@ -67,6 +67,20 @@ GROUP BY a.dfp_external_storage_s3_key
 ORDER BY b.idx""",(slider_name,)) 
     return images
 
+@frappe.whitelist(allow_guest=True)
+def getCaategoryFrontPage(filter=''):
+    str=''
+    if filter:
+        f = json.loads(filter)
+        for fil in f:
+            if(fil['operator'].upper() == 'IN'):
+                j=','.join(f"""'{x}'""" for x in fil['value'])
+                str += f" AND A.`{fil['field']}` {fil['operator']} ({j})"
+
+    sql=f"""SELECT A.* FROM (SELECT a.name,a.parent_item_group,a.route,group_concat(b.dfp_external_storage_s3_key) as image FROM `tabItem Group` a JOIN tabFile b ON a.item_group_name = b.attached_to_name AND b.attached_to_doctype='Item Group'  AND a.parent_item_group = 'Categories') A where 1=1 {str}"""
+    cate = frappe.db.sql(sql,as_dict=True)
+    return cate
+    
 
 @frappe.whitelist(allow_guest=True)
 def login():
