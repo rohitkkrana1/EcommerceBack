@@ -1,6 +1,7 @@
 import frappe
 import json
 from frappe import auth
+from pprint import pprint
 
 @frappe.whitelist(allow_guest=True)
 def getItems(filter="", limit=10, offset=0):
@@ -85,13 +86,13 @@ def getCaategoryFrontPage(filter=''):
 @frappe.whitelist(allow_guest=True)
 def login():
     data = json.loads(frappe.request.data)
-    try:
-        loginManager = frappe.auth.LoginManager()
-        loginManager.authenticate(user= data["username"],pwd= data["password"])
-        loginManager.post_login()
-    except frappe.exceptions.AuthenticationError:
+    
+    loginManager = frappe.auth.LoginManager()
+    loginManager.authenticate(user= data["username"],pwd= data["password"])
+    loginManager.post_login()
+    if not frappe.session.user:
         frappe.clear_messages()
-        frappe.local.response['message'] = {
+        frappe.response['message'] = {
             "success_key":0,
             "message":"username or password is invalid"
         }
@@ -103,20 +104,21 @@ def login():
         "message":"Authentication Success",
         "api_key": user.api_key,
         "api_secret":api_gen,
-        "username":user.username,
+        "name":user.username,
         "email":user.email
     }
 
 
 def generate_keys(user):
-    user = frappe.get_doc('User',user)
+    users = frappe.get_doc('User',user)   
     api_secret = frappe.generate_hash(length=25)
 
-    if not user.api_key:
-        user.api_key = frappe.generate_hash(length=15)
+    if not users.api_key:
+        users.api_key = frappe.generate_hash(length=15)
 
-    user.api_secret = api_secret
-    user.save()
+    users.api_secret = api_secret
+    #user.update(ignore_permissions = True)
+    users.save(ignore_permissions=True)
     return api_secret
 
 
@@ -126,7 +128,117 @@ def saveCart():
 
 
 @frappe.whitelist()
-def getLoginUser():
-    return frappe.get_user().doc.name
+def getProfile():
+    user = frappe.get_user().doc.name
+    if user:
+        profile = frappe.get_doc('User',{'email':user})
+        frappe.response["message"]={
+            'profile':{
+                
+                'name':{'firstName':profile.first_name,
+                        'fullName':profile.full_name
+                        },
+                'email':profile.email,
+                'timeZone':profile.time_zone,
+                'language':profile.language,
+                'phone':profile.mobile_no,
+                'avatar':'',
+                'dateOfBirth':'2022-10-22'
+            }
+        }
+    else:
+        frappe.response["message"] = {
+            "success_key":0,
+            "message":"No User found"
+        }
 
 
+@frappe.whitelist()
+def editProfile():
+    user = frappe.get_user().doc.name
+    if user:
+        data = json.loads(frappe.request.data)
+        profile = frappe.get_doc('Customer',{'customer_name':user})
+        profile.first_name = data['first_name']
+        profile.mobile_no = data['contact']
+        profile.save(ignore_permissions=True)
+        frappe.response["message"] = {
+            "success_key":1,
+            "message":"Profile Edit is successfully Done!"
+        }
+    else:
+        frappe.response["message"] = {
+            "success_key":0,
+            "message":"Profile Edit was not successful"
+        }
+
+@frappe.whitelist()
+def getContact():
+    user = frappe.get_user().doc.name
+    if user:
+        try:
+            contact = frappe.get_all('Contact',filters={'user':user},fields=['name','address','email_id','first_name','mobile_no','last_name','middle_name'])
+            frappe.response["message"]={
+                'Address': contact
+            }
+        except Exception as err:
+            frappe.response["message"] = {
+            "success_key":0,
+            "message":err
+        }
+
+    else:
+        frappe.response["message"] = {
+            "success_key":0,
+            "message":"No User found"
+        }
+
+@frappe.whitelist()
+def getSingleContact():
+    user = frappe.get_user().doc.name
+    if user:
+        try:
+            data = json.loads(frappe.request.data)
+            contact = frappe.get_doc('Contact',data['name']).as_dict()
+            frappe.response["message"]={
+                'Address': contact
+            }
+        except Exception as err:
+            frappe.response["message"] = {
+            "success_key":0,
+            "message":err
+        }
+
+    else:
+        frappe.response["message"] = {
+            "success_key":0,
+            "message":"No User found"
+        }
+
+@frappe.whitelist()
+def editAddress():
+    data = json.loads(frappe.request.data)
+    addr = frappe.get_doc('Contact',data['id']).as_dict()
+    pprint(data['address'])
+    if addr.name:       
+        addr.first_name = data['name']
+        addr.mobile_no = data['contact']
+        addr.address = [{
+            'address_title':'Test',
+            'address_type':'Office',
+            'address_line1':'Testing  12',
+            'address_line2':'checking',
+            'city':'Bareilly',
+            'state':'UP',
+            'Country':'India'
+        }]
+        addr.save(ignore_permissions=True)
+        frappe.response["message"] = {
+            "success_key":1,
+            "message":"Address Edit is successfully Done!"
+        }
+    else:
+        frappe.response["message"] = {
+            "success_key":0,
+            "message":"Address Edit was not successful"
+        }
