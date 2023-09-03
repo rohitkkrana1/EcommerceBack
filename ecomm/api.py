@@ -45,12 +45,16 @@ def getItems(filter="", limit=10, offset=0):
 @frappe.whitelist(allow_guest=True)
 def userRegister():
     data = json.loads(frappe.request.data)
-    
     try:
-        user = frappe.get_doc({"doctype":"User","first_name":data['name'],"email":data['email'],"user_type":"Website User","mobile_no":data['mobile'],"new_password":data["password"]})
+        user = frappe.get_doc({"doctype":"User","first_name":data['name'],"email":data['email'],"user_type":"Website User","mobile_no":data['mobile'],"new_password":data["password"],'role_profile_name':"Zuri Customer"})
         user.insert(ignore_permissions = True)
-        customer = frappe.get_doc({"doctype":"Customer","customer_name":data["name"],"coustmer_type":"Individual","customer_group":"Individual","territory":"India"})
+        customer = frappe.get_doc({"doctype":"Customer","customer_name":data["name"],"customer_type":"Individual","customer_group":"Individual","territory":"India"})
         customer.insert(ignore_permissions = True)
+        contact = data['name'].split(" ")
+        contact  = frappe.get_doc({"doctype":"Contact","first_name":contact[0],"last_name": len(contact) > 1 and contact[1] or ""})
+        contact.append("email_ids", dict(email_id=data['email'], is_primary=1))
+        contact.append("links", dict(link_doctype='Customer', link_name=data['name']))
+        contact.insert(ignore_permissions = True)
         frappe.db.commit()
         frappe.response["message"]="data saved successfully"
     except Exception as e:
@@ -158,7 +162,7 @@ def editProfile():
     user = frappe.get_user().doc.name
     if user:
         data = json.loads(frappe.request.data)
-        profile = frappe.get_doc('Customer',{'customer_name':user})
+        profile = frappe.get_doc('Contact',{'user':user})
         profile.first_name = data['first_name']
         profile.mobile_no = data['contact']
         profile.save(ignore_permissions=True)
@@ -173,14 +177,29 @@ def editProfile():
         }
 
 @frappe.whitelist()
-def getContact():
+def getAddresses():
     user = frappe.get_user().doc.name
     if user:
         try:
-            contact = frappe.get_all('Contact',filters={'user':user},fields=['name','address','email_id','first_name','mobile_no','last_name','middle_name'])
-            frappe.response["message"]={
-                'Address': contact
+            contact = frappe.get_doc('Contact',{'user':user})
+            if(contact):
+                customer = frappe.get_doc('Dynamic Link',{'parent':contact.name})
+                address_names = frappe.db.get_all(
+                "Dynamic Link",
+                fields=("parent"),
+                filters=dict(parenttype="Address", link_doctype='Customer', link_name=customer.link_name),
+                )
+            
+            out = []
+
+            for a in address_names:
+                address = frappe.get_all("Address", filters={'name':a.parent},fields=['*'])
+                out.append(address[0])
+
+            frappe.response["message"] = {
+                "Address":out
             }
+        
         except Exception as err:
             frappe.response["message"] = {
             "success_key":0,
@@ -192,16 +211,59 @@ def getContact():
             "success_key":0,
             "message":"No User found"
         }
+        
+@frappe.whitelist()
+def add_address():
+    user = frappe.get_user().doc.name
+    if user:
+        contact = frappe.get_doc('Contact',{'user':user})
+        if(contact):
+            try:
+                data = json.loads(frappe.request.data)
+                customer = frappe.get_doc('Dynamic Link',{'parent':contact.name}) 
+                #return customer.link_name
+                address = frappe.get_doc({
+                    'doctype':'Address',
+                    'address_title':data['address_title'],
+                    'address_type':'Personal',
+                    'address_line1':data['address_line1'],
+                    'address_line2':data['address_line2'],
+                    'city':data['city'],
+                    'county':data['state'] and data['state'] or "",
+                    'state':data['state'] and data['state'] or "",
+                    'pincode': data['pincode'] and data['pincode'] or "",
+                    'country':data['country'] and data['country'] or "India",
+                    'email_id': data['email_id'] and data['email_id'] or "",
+                    'phone': data['phone'] and data['phone'] or ""
+                    })
+                address.append("links", dict(link_doctype='Customer', link_name=customer.link_name))
+                address.insert()           
+                frappe.response["message"] = {
+                    "success_key":1,
+                    "message":"Address Added is successfully Done!"
+                }
+            except Exception as err:
+                frappe.response["message"] = {
+                "success_key":0,
+                "message":err
+                }
+        
+    else:
+        frappe.response["message"] = {
+            "success_key":0,
+            "message":"No User found"
+        }         
+        
 
 @frappe.whitelist()
-def getSingleContact():
+def getAddress():
     user = frappe.get_user().doc.name
     if user:
         try:
             data = json.loads(frappe.request.data)
-            contact = frappe.get_doc('Contact',data['name']).as_dict()
+            address = frappe.get_doc('Address',data['name'])
             frappe.response["message"]={
-                'Address': contact
+                'Address': address
             }
         except Exception as err:
             frappe.response["message"] = {
@@ -215,24 +277,22 @@ def getSingleContact():
             "message":"No User found"
         }
 
+
 @frappe.whitelist()
 def editAddress():
     data = json.loads(frappe.request.data)
-    addr = frappe.get_doc('Contact',data['id']).as_dict()
-    pprint(data['address'])
-    if addr.name:       
-        addr.first_name = data['name']
-        addr.mobile_no = data['contact']
-        addr.address = [{
-            'address_title':'Test',
-            'address_type':'Office',
-            'address_line1':'Testing  12',
-            'address_line2':'checking',
-            'city':'Bareilly',
-            'state':'UP',
-            'Country':'India'
-        }]
-        addr.save(ignore_permissions=True)
+    addr = frappe.get_doc('Address',data['id'])
+    if addr.name:            
+        addr.address_title= data['address_title']
+        addr.address_line1=data['address_line1']
+        addr.address_line2=data['address_line2']
+        addr.city=data['city']
+        addr.state=data['state']
+        addr.pincode=data['pincode']
+        addr.country=data['country']
+        addr.email_id = data['email_id']   
+        addr.phone = data['phone']   
+        addr.save()            
         frappe.response["message"] = {
             "success_key":1,
             "message":"Address Edit is successfully Done!"
