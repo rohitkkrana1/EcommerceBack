@@ -6,7 +6,12 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "categories"
+  "categories",
+  "order",
+  "label",
+  "description",
+  "route",
+  "active"
  ],
  "fields": [
   {
@@ -14,12 +19,38 @@
    "fieldtype": "Link",
    "label": "categories",
    "options": "Item Group"
+  },
+  {
+   "fieldname": "order",
+   "fieldtype": "Int",
+   "label": "order"
+  },
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "label": "Label"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "label": "Description"
+  },
+  {
+   "fieldname": "route",
+   "fieldtype": "Data",
+   "label": "route"
+  },
+  {
+   "default": "0",
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "label": "Active"
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2023-06-11 23:58:19.111117",
+ "modified": "2023-09-21 18:28:57.778355",
  "modified_by": "Administrator",
  "module": "Ecomm",
  "name": "Item Category",

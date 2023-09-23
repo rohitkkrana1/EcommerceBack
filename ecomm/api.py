@@ -2,7 +2,8 @@ import frappe
 import json
 from frappe import auth
 from pprint import pprint
-
+from ecomm.apiSearch import get_product_filter_data
+from . import cdn
 @frappe.whitelist(allow_guest=True)
 def getItems(filter="", limit=10, offset=0):
     condition = ''
@@ -64,7 +65,7 @@ def userRegister():
 
 @frappe.whitelist(allow_guest=True)
 def slider(slider_name):
-    images = frappe.db.sql(f"""SELECT b.idx,b.heading as title,b.`description`,b.url,a.dfp_external_storage_s3_key AS image FROM tabFile a 
+    images = frappe.db.sql(f"""SELECT b.idx,b.heading as title,b.`description`,b.url,concat('{cdn}',a.dfp_external_storage_s3_key) AS image FROM tabFile a 
 JOIN `tabWebsite Slideshow Item` b ON a.attached_to_name=b.parent 
 AND a.attached_to_doctype=b.parenttype #AND a.file_url=b.image
 WHERE a.attached_to_name=%s
@@ -77,12 +78,13 @@ def getCaategoryFrontPage(filter=''):
     str=''
     if filter:
         f = json.loads(filter)
+        
         for fil in f:
             if(fil['operator'].upper() == 'IN'):
                 j=','.join(f"""'{x}'""" for x in fil['value'])
                 str += f" AND A.`{fil['field']}` {fil['operator']} ({j})"
 
-    sql=f"""SELECT A.* FROM (SELECT a.name,a.parent_item_group,a.route,group_concat(b.dfp_external_storage_s3_key) as image FROM `tabItem Group` a JOIN tabFile b ON a.item_group_name = b.attached_to_name AND b.attached_to_doctype='Item Group'  Group By a.name) A where 1=1 {str}"""
+    sql=f"""SELECT A.* FROM (SELECT a.name,a.parent_item_group,a.route,group_concat(concat('{cdn}',b.dfp_external_storage_s3_key)) as image FROM `tabItem Group` a JOIN tabFile b ON a.item_group_name = b.attached_to_name AND b.attached_to_doctype='Item Group'  Group By a.name) A where 1=1 {str}"""
     cate = frappe.db.sql(sql,as_dict=True)
     return cate
     
@@ -302,3 +304,59 @@ def editAddress():
             "success_key":0,
             "message":"Address Edit was not successful"
         }
+
+@frappe.whitelist(allow_guest=True)
+def getPageModule(pageName=None):
+    items_details = []
+   
+    if pageName:
+        page = frappe.db.get_all("Website Module",
+        filters=[["page", "=",pageName]],
+        fields = ["module_name","page","description","name","item_title","item_description","category_title","category_description","item_module","isactive_item","cate_module","isactive_cate"],
+        order_by="`order` asc"
+        )        
+        if page:                          
+            for p in page: 
+                temp ={} 
+                temp['page'] = p
+                items = frappe.get_doc("Website Module",p.name).as_dict()
+                i = [] 
+                temp['items']=[]     
+                if items.product and p.isactive_item:
+                    for item in items.product:
+                        if(item.active == False):
+                            continue
+                        
+                        f = dict(item.items())
+                        it =  frappe.get_doc("Website Item",f["items"])
+                        i.append(it.item_code)                                        
+                    if i:             
+                        data = {'field_filters':{"item_code": i}}
+                        temp['items']= get_product_filter_data(data)['items']
+                temp['cate'] =[]   
+                if items.categories and p.isactive_cate:
+                    c=[]
+                    for cate in items.categories:
+                        if(cate.active == False):
+                            continue
+                        
+                        ca =  frappe.get_doc("Item Group",cate.categories)
+                        img = frappe.db.get_all("File",filters=[
+                            ["attached_to_name","=",cate.categories],
+                            ["attached_to_doctype","=","Item Group"]
+                        ],fields=["dfp_external_storage_s3_key"]
+                                                
+                        )                                        
+                        c.append({"name":ca.name,
+                                  "parent_item_group":ca.parent_item_group,
+                                  "route":ca.route,
+                                  "image":[cdn+x.dfp_external_storage_s3_key for x in img]
+                                  
+                                })
+                        
+                    temp['cate'] =c
+                
+                items_details.append(temp)
+   
+                
+    return items_details
